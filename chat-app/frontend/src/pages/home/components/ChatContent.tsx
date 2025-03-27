@@ -1,6 +1,6 @@
 import DefaultUserAvatar from '@/assets/Default_pfp.jpg';
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
-import { getSelectedUserMessages, IChatMessageModel, selectNewUser, sendMessage } from "@/redux/slices/chatSlice";
+import { getSelectedUserMessages, IChatMessageModel, resetSelectedUserMessages, selectNewUser, sendMessage } from "@/redux/slices/chatSlice";
 import { IUser } from "@/types/user.type";
 import { convertDateToHM } from "@/utils/dateConverter";
 import { Loader, Loader2, MessageCircleMore, Send, Upload, X } from "lucide-react";
@@ -10,13 +10,19 @@ import imageCompression from 'browser-image-compression';
 
 
 export const ChatContent = () => {
-  const { selectedUserId, selectedUserMessages, allUsers, onlineUsers, loadingChat, isSendingMessage } = useAppSelector(state => state.chat);
+  const { selectedUserId, selectedUserMessages, allUsers, onlineUsers, loadingChat, isSendingMessage, topMessageId, hasMore } = useAppSelector(state => state.chat);
   const { user } = useAppSelector(state => state.auth)
+
+  const [isLoadingMoreMessageVisible, setIsLoadingMoreMessageVisible] = useState(false);
+
+  const [shouldScrollIntoView, setShouldScrollIntoView] = useState(true);
 
   const dispatch = useAppDispatch();
   useEffect(() => {
     if (selectedUserId) {
-      dispatch(getSelectedUserMessages(selectedUserId))
+      dispatch(resetSelectedUserMessages())
+      dispatch(getSelectedUserMessages({ receiverId: selectedUserId, limit: 10 }))
+      setShouldScrollIntoView(true);
     }
   }, [selectedUserId])
 
@@ -26,11 +32,44 @@ export const ChatContent = () => {
 
   const handleDeselectUser = () => {
     dispatch(selectNewUser(""));
+    setShouldScrollIntoView(true);
   }
+
+  // A ref to check if user scroll to the top message => fetch more messages
+  const topMessageRef: RefObject<HTMLDivElement | null> = useRef<HTMLDivElement>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  useEffect(() => {
+    setTimeout(() => {
+      if (!topMessageId || !topMessageRef.current) return;
+      observerRef.current = new IntersectionObserver(
+        (entries) => {
+          console.log("Intersecting")
+          if (entries[0].isIntersecting) {
+            setIsLoadingMoreMessageVisible(true);
+            setShouldScrollIntoView(false)
+            console.log("Top message is visible, loading more...");
+            dispatch(getSelectedUserMessages({ receiverId: selectedUserId, limit: 5, topMessageId })).finally(() => {
+              setIsLoadingMoreMessageVisible(false)
+            });
+          }
+        },
+        { root: null, rootMargin: "0px", threshold: 1.0 }
+      );
+
+      observerRef.current.observe(topMessageRef.current);
+    }, 1000)
+
+    return () => {
+      observerRef.current?.disconnect();
+    };
+  }, [topMessageId, selectedUserId]);
+
+
   return (
     <div className="flex flex-col w-full">
       {selectedUserId ? (
-        loadingChat ? (<>
+        loadingChat && shouldScrollIntoView ? (<>
           <div className="flex-1 w-full flex justify-center items-center">
             <div className="flex flex-col items-center gap-3">
               <Loader className="size-10 text-primary animate-spin" />
@@ -40,7 +79,18 @@ export const ChatContent = () => {
         </>) : (
           <>
             <ChatHeader userInfo={selectedUserInformation} isOnline={isOnline} handleDeselectUser={handleDeselectUser} />
-            <ChatBody messages={selectedUserMessages} selectedUserId={selectedUserId} selectedUserName={selectedUserInformation?.fullname} userImage={user?.avatar} selectedUserImage={selectedUserInformation?.avatar} />
+            <ChatBody
+              messages={selectedUserMessages}
+              selectedUserId={selectedUserId}
+              selectedUserName={selectedUserInformation?.fullname}
+              userImage={user?.avatar}
+              selectedUserImage={selectedUserInformation?.avatar}
+              topMessageRef={topMessageRef}
+              isLoadingMoreMessageVisible={isLoadingMoreMessageVisible}
+              loadingChat={loadingChat}
+              topMessageId={topMessageId}
+              shoudlScrollIntoView={shouldScrollIntoView}
+            />
             <ChatInput receiverId={selectedUserId} />
           </>
         )
@@ -86,21 +136,40 @@ type ChatBodyProps = {
   selectedUserName?: string,
   userImage?: string,
   selectedUserImage?: string,
+  topMessageRef: RefObject<HTMLDivElement | null>,
+  isLoadingMoreMessageVisible: boolean,
+  loadingChat: boolean,
+  topMessageId?: string | null,
+  shoudlScrollIntoView: boolean
 }
 
-const ChatBody: React.FC<ChatBodyProps> = ({ messages, selectedUserId, selectedUserName, userImage, selectedUserImage }) => {
+const ChatBody: React.FC<ChatBodyProps> = ({ messages, selectedUserId, selectedUserName, userImage, selectedUserImage, topMessageRef, isLoadingMoreMessageVisible, topMessageId, loadingChat, shoudlScrollIntoView }) => {
 
   const chatBoxRef: RefObject<HTMLDivElement | null> = useRef<HTMLDivElement>(null);
+  const [currentLastMessageId, setCurrentLastMessageId] = useState<string | null>("");
 
   useEffect(() => {
-    chatBoxRef.current?.scrollIntoView({ behavior: "smooth" });
+    if(messages && messages.length > 0) {
+      if (shoudlScrollIntoView) {
+        chatBoxRef.current?.scrollIntoView({ behavior: "smooth" });
+        setCurrentLastMessageId(messages[messages.length - 1]?._id || null);
+      }else{
+        if (currentLastMessageId !== messages[messages.length - 1]?._id){
+          chatBoxRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+      }
+      
+    }
   }, [messages])
 
   return <div className="flex-1 overflow-scroll bg-base-100 p-4" >{
     (messages && messages?.length > 0) ? (<>
+      {isLoadingMoreMessageVisible && <div className="flex justify-center items-center py-2 gap-4"><Loader2 className={`${loadingChat ? "animate-spin" : "animate-none"} `} size={20} /> Loading more messages...</div>}
       {messages.map((message, index) => {
         const isOwnedChat = message.senderId !== selectedUserId;
         const isNewest = index === messages.length - 1;
+        const isTopMessage = message._id == topMessageId;
+        console.log("Message _id", message._id, "Top Message Id", topMessageId, "Is Top Message", isTopMessage)
         return <ChatBubble
           key={message._id}
           message={message}
@@ -108,7 +177,9 @@ const ChatBody: React.FC<ChatBodyProps> = ({ messages, selectedUserId, selectedU
           isNewest={isNewest}
           isSendingMessage={false}
           senderName={isOwnedChat ? "You" : selectedUserName || "Other"}
-          senderImage={isOwnedChat ? userImage : selectedUserImage} ref={chatBoxRef} />
+          senderImage={isOwnedChat ? userImage : selectedUserImage}
+          newestMessageRef={isNewest ? chatBoxRef : null}
+          topMessageRef={isTopMessage ? topMessageRef : null} />
       })}
 
     </>) : (<div className="flex justify-center items-center h-full text-gray-500 italic font-bold">
@@ -125,11 +196,14 @@ type ChatBubbleProps = {
   isSendingMessage: boolean
   senderName: string,
   senderImage?: string,
-  ref?: RefObject<HTMLDivElement | null>
+  newestMessageRef?: RefObject<HTMLDivElement | null> | null
+  topMessageRef?: RefObject<HTMLDivElement | null> | null
 }
 
-const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isOwnedChat, isNewest, isSendingMessage, senderName, senderImage, ref }) => {
-  return <div className={`chat ${isOwnedChat ? "chat-end" : "chat-start"}`} ref={isNewest ? ref : null}>
+const ChatBubble: React.FC<ChatBubbleProps> = ({ message, isOwnedChat, isNewest, isSendingMessage, senderName, senderImage, newestMessageRef, topMessageRef }) => {
+  const chatRef = newestMessageRef !== null ? newestMessageRef : topMessageRef;
+  console.log("is newest message: ", isNewest, newestMessageRef)
+  return <div className={`chat ${isOwnedChat ? "chat-end" : "chat-start"}`} ref={chatRef} >
     <div className="chat-image avatar">
       <div className="w-10 rounded-full">
         <img
