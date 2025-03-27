@@ -45,7 +45,7 @@ export const ChatContent = () => {
       observerRef.current = new IntersectionObserver(
         (entries) => {
           console.log("Intersecting")
-          if (entries[0].isIntersecting) {
+          if (entries[0].isIntersecting && hasMore) {
             setIsLoadingMoreMessageVisible(true);
             setShouldScrollIntoView(false)
             console.log("Top message is visible, loading more...");
@@ -90,6 +90,7 @@ export const ChatContent = () => {
               loadingChat={loadingChat}
               topMessageId={topMessageId}
               shoudlScrollIntoView={shouldScrollIntoView}
+              hasMore={hasMore}
             />
             <ChatInput receiverId={selectedUserId} />
           </>
@@ -140,30 +141,32 @@ type ChatBodyProps = {
   isLoadingMoreMessageVisible: boolean,
   loadingChat: boolean,
   topMessageId?: string | null,
-  shoudlScrollIntoView: boolean
+  shoudlScrollIntoView: boolean,
+  hasMore: boolean
 }
 
-const ChatBody: React.FC<ChatBodyProps> = ({ messages, selectedUserId, selectedUserName, userImage, selectedUserImage, topMessageRef, isLoadingMoreMessageVisible, topMessageId, loadingChat, shoudlScrollIntoView }) => {
+const ChatBody: React.FC<ChatBodyProps> = ({ messages, selectedUserId, selectedUserName, userImage, selectedUserImage, topMessageRef, isLoadingMoreMessageVisible, topMessageId, loadingChat, shoudlScrollIntoView, hasMore }) => {
 
   const chatBoxRef: RefObject<HTMLDivElement | null> = useRef<HTMLDivElement>(null);
   const [currentLastMessageId, setCurrentLastMessageId] = useState<string | null>("");
 
   useEffect(() => {
-    if(messages && messages.length > 0) {
+    if (messages && messages.length > 0) {
       if (shoudlScrollIntoView) {
         chatBoxRef.current?.scrollIntoView({ behavior: "smooth" });
         setCurrentLastMessageId(messages[messages.length - 1]?._id || null);
-      }else{
-        if (currentLastMessageId !== messages[messages.length - 1]?._id){
+      } else {
+        if (currentLastMessageId !== messages[messages.length - 1]?._id) {
           chatBoxRef.current?.scrollIntoView({ behavior: "smooth" });
         }
       }
-      
+
     }
   }, [messages])
 
   return <div className="flex-1 overflow-scroll bg-base-100 p-4" >{
     (messages && messages?.length > 0) ? (<>
+      {!hasMore && !isLoadingMoreMessageVisible && <div className="flex justify-center items-center py-2 gap-4 italic text-secondary text-sm">There is no more messages</div>}
       {isLoadingMoreMessageVisible && <div className="flex justify-center items-center py-2 gap-4"><Loader2 className={`${loadingChat ? "animate-spin" : "animate-none"} `} size={20} /> Loading more messages...</div>}
       {messages.map((message, index) => {
         const isOwnedChat = message.senderId !== selectedUserId;
@@ -287,7 +290,7 @@ const ChatInput: React.FC<ChatInputProps> = ({ receiverId }) => {
     <div className="flex p-3 w-full items-center gap-3">
       <input placeholder="Enter your message..." type="text" className="input flex-1" value={text} onChange={(e) => setText(e.target.value)} />
       <input type="file" className="hidden" ref={imageInputRef} onChange={handleImageChange} />
-      <button onClick={() => {
+      <button type='button' onClick={() => {
         imageInputRef.current?.click();
       }} className="p-2"><Upload size={20} /></button>
       <button type="submit" className="p-2 disabled:text-gray-600" disabled={(!(text.length > 0) && imagePreview == null) || isSendingMessage}>{isSendingMessage ? (<Loader2 size={20} className='animate-spin' />) : (<Send size={20} />)}</button>
