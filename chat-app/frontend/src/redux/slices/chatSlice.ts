@@ -2,6 +2,10 @@ import { axiosInstance } from "@/axios/axiosInstance";
 import { IUser } from "@/types/user.type";
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 
+export enum CHAT_ENUM {
+  MAX_MESSAGE_PER_SCROLL = 5,
+}
+
 export interface IChatContent {
   text?: string;
   image?: string;
@@ -10,7 +14,7 @@ export interface IChatMessageModel extends IChatContent {
   senderId: string;
   receiverId: string;
   createdAt?: string;
-  _id?:string
+  _id?: string;
 }
 
 export interface IChatState {
@@ -22,6 +26,8 @@ export interface IChatState {
   loadingAllUsers: boolean;
   isSendingMessage: boolean;
   error: string | null;
+  topMessageId?: string | null;
+  hasMore: boolean;
 }
 
 const initialChatState: IChatState = {
@@ -33,6 +39,8 @@ const initialChatState: IChatState = {
   loadingAllUsers: false,
   isSendingMessage: false,
   error: null,
+  topMessageId: null,
+  hasMore: true,
 };
 
 export type sendMessageParams = {
@@ -71,11 +79,44 @@ export const getAllUsers = createAsyncThunk(
   }
 );
 
+// export const getSelectedUserMessages = createAsyncThunk(
+//   "chat/getSelectedUserMessages",
+//   async (receiverId: string, { rejectWithValue }) => {
+//     try {
+//       const response = await axiosInstance.get("/message/" + receiverId);
+//       return response.data;
+//     } catch (error) {
+//       rejectWithValue(error || "Error fetching users");
+//     }
+//   }
+// );
+
+// Update for infinite scrolling
 export const getSelectedUserMessages = createAsyncThunk(
   "chat/getSelectedUserMessages",
-  async (receiverId: string, { rejectWithValue }) => {
+  async (
+    {
+      receiverId,
+      topMessageId,
+      limit,
+    }: { receiverId: string; topMessageId?: string; limit?: number },
+    { rejectWithValue }
+  ) => {
     try {
-      const response = await axiosInstance.get("/message/" + receiverId);
+      const queryParams: { topMessageId?: string; limit?: number } = {};
+      if (topMessageId) {
+        queryParams.topMessageId = topMessageId;
+        queryParams.limit =
+          limit && Number(limit) ? limit : CHAT_ENUM.MAX_MESSAGE_PER_SCROLL;
+      }
+      const response = await axiosInstance.get(
+        "/message/cursor/" + receiverId,
+        {
+          params: {
+            ...queryParams,
+          },
+        }
+      );
       return response.data;
     } catch (error) {
       rejectWithValue(error || "Error fetching users");
@@ -97,6 +138,9 @@ const chatSlice = createSlice({
     selectNewUser(state, action: PayloadAction<string>) {
       state.selectedUserId = action.payload;
     },
+    resetSelectedUserMessages(state) {
+      state.selectedUserMessages = [];
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -105,9 +149,12 @@ const chatSlice = createSlice({
       })
       .addCase(
         sendMessage.fulfilled,
-        (state, action: PayloadAction<{
-          newMessage: IChatMessageModel
-        }>) => {
+        (
+          state,
+          action: PayloadAction<{
+            newMessage: IChatMessageModel;
+          }>
+        ) => {
           state.isSendingMessage = false;
           state.selectedUserMessages.push(action.payload.newMessage);
         }
@@ -135,11 +182,30 @@ const chatSlice = createSlice({
       })
       .addCase(
         getSelectedUserMessages.fulfilled,
-        (state, action: PayloadAction<{
-          allMessages: IChatMessageModel[]
-        }>) => {
-          console.log("Selected User Message: " + action.payload?.allMessages);
-          state.selectedUserMessages = action.payload.allMessages;
+        (
+          state,
+          action: PayloadAction<{
+            allMessages: IChatMessageModel[];
+          }>
+        ) => {
+          console.log(
+            "Selected User Message: " +
+              action.payload?.allMessages.map(
+                (m) => "\n Id:" + (m._id || "") + "Date: " + m.createdAt + "\n"
+              )
+          );
+          state.topMessageId =
+            action.payload.allMessages.length > 0
+              ? action.payload.allMessages[
+                  action.payload.allMessages.length - 1
+                ]._id
+              : null;
+          state.hasMore = !(action.payload.allMessages.length < 5);
+          state.selectedUserMessages = [
+            ...action.payload.allMessages.reverse(),
+            ...state.selectedUserMessages,
+          ];
+          console.log("Top Message Id: " + state.topMessageId);
           state.loadingChat = false;
         }
       )
@@ -149,6 +215,10 @@ const chatSlice = createSlice({
       });
   },
 });
-export const { receiveMessage, updateOnlineUsers, selectNewUser } =
-  chatSlice.actions;
+export const {
+  receiveMessage,
+  updateOnlineUsers,
+  selectNewUser,
+  resetSelectedUserMessages,
+} = chatSlice.actions;
 export default chatSlice.reducer;

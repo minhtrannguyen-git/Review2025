@@ -59,7 +59,7 @@ export async function updateProfile(req: IAuthenticatedRequest, res: Response) {
     });
 
     const previousUser = await User.findById(req.userId);
-    
+
     const updatedUser = await User.findByIdAndUpdate(
       req.userId,
       {
@@ -74,12 +74,14 @@ export async function updateProfile(req: IAuthenticatedRequest, res: Response) {
     res.status(200).json({
       ...securedUser,
     });
-    
+
     // Destroy previous avatar if exists
     if (previousUser?.avatar) {
       const publicId = previousUser.avatar.split("/").pop()?.split(".")[0];
+      console.log("Public ID: ", publicId);
       if (publicId) {
-        await cloudinary.uploader.destroy(publicId);
+        const successDestroy = await cloudinary.uploader.destroy(`chat_app_profile_pictures/${publicId}`);
+        console.log("Destroy success: ", successDestroy);
       }
     }
   } catch (e) {
