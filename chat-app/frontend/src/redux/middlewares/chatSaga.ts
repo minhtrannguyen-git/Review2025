@@ -78,6 +78,8 @@ function createOnlineUsersChannel(socket: Socket) {
       emitter(users);
     });
     return () => {
+    console.log("Online user Socket is closed")
+
       socket.off("online-users");
     };
   });
@@ -98,6 +100,7 @@ function* ioOnlineUsers(socket: Socket) {
       }
     }
   } finally {
+    console.log("Online user channel is closed")
     channel.close();
   }
 }

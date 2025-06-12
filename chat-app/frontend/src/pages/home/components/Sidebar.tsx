@@ -1,6 +1,6 @@
 import { IUser } from "@/types/user.type"
 import { Users } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import DefaultAvatar from '@/assets/Default_pfp.jpg';
 import { useAppDispatch, useAppSelector } from "@/redux/hooks";
 import { getAllUsers, selectNewUser } from "@/redux/slices/chatSlice";
@@ -9,6 +9,13 @@ import toast from "react-hot-toast";
 export const Sidebar = () => {
 
   const { allUsers, onlineUsers, selectedUserId, loadingAllUsers, error } = useAppSelector(state => state.chat);
+  const [isOnlyDisplayOnline, setIsOnlyDisplayOnline] = useState(false);
+
+  const displayedUsers = useMemo(() => {
+    return isOnlyDisplayOnline ? allUsers.filter(user => onlineUsers.includes(user._id)) : allUsers;
+  }, [allUsers, onlineUsers, isOnlyDisplayOnline])
+
+
 
   const dispatch = useAppDispatch();
 
@@ -22,7 +29,7 @@ export const Sidebar = () => {
   }, [])
 
   useEffect(() => {
-    if(error){
+    if (error) {
       toast.error(error);
     }
   }, [error])
@@ -37,7 +44,7 @@ export const Sidebar = () => {
           Contacts
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="checkbox" />
+          <input type="checkbox" className="checkbox" checked={isOnlyDisplayOnline} onClick={() => setIsOnlyDisplayOnline(prev => !prev)} />
           Show online only <span className="text-gray-600">{`(${onlineUsers.length} online)`}</span>
         </div>
       </div>
@@ -59,7 +66,7 @@ export const Sidebar = () => {
           </div>
         ) : (
           <div className="flex flex-col overflow-scroll py-3">
-            {allUsers?.map(user => <SidebarUser key={user._id} userInfo={user} handleSelectUser={handleSelectUser} isOnline={onlineUsers.includes(user._id)} isSelected={selectedUserId == user._id} />)}
+            {displayedUsers?.map(user => <SidebarUser key={user._id} userInfo={user} handleSelectUser={handleSelectUser} isOnline={onlineUsers.includes(user._id)} isSelected={selectedUserId == user._id} />)}
           </div>
         )
       }
