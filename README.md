@@ -1,6 +1,5 @@
 ---
 
-```markdown
 # Chat App 💬
 
 A real-time chat application built using the **MERN Stack** (MongoDB, Express, React, Node.js) with **Socket.IO** for live messaging. The app supports user authentication, real-time messaging, and image upload via Cloudinary.
