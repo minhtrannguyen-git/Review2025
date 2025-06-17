@@ -33,7 +33,7 @@ A real-time chat application built using the **MERN Stack** (MongoDB, Express, R
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/chat-app.git
+git clone https://github.com/minhtrannguyen-git/chat-app.git
 cd chat-app
 ````
 
