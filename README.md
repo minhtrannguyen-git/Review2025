@@ -119,10 +119,3 @@ VITE_BACKEND_SOCKET_URL=http://localhost:5001
 * [Express](https://expressjs.com/)
 
 ---
-
-```
-
----
-
-Let me know if you want to include usage instructions (e.g. how to create a room, start a chat, upload an image) or deployment notes (e.g. how to host this on Render, Vercel, etc).
-```
